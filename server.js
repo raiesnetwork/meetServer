@@ -18,9 +18,13 @@ import videoCall from './controlers/VideoCallController.js'
 import setupVideoCall from "./Helpers/VideocallSocket.js";
 import voiceCallRoutes from './controlers/voiceCallRoutes.js';
 import setupVoiceCall from "./Helpers/VoiceCallSocket.js";
+import { error } from "console";
 configDotenv()
 const pendingRequests = new Map();
 const chatHistory = new Map();
+// meetingId => Map<userId, socketId>
+const activeMeetingUsers = new Map();
+
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,45 +98,68 @@ io.on("connection", (socket) => {
       console.error("Error joining meeting as host:", error);
     }
   });
-
-  socket.on("join-request", async (data) => {
-    const { name, meetingId, userId } = data;
-    socket.join(meetingId)
-    try {
-      const meet = await MeetLink.findOne({ linkId: meetingId });
-      if (!meet) return;
-
-      const requestId = `${meetingId}-${userId}`;
-      if (pendingRequests.has(requestId)) {
-        console.log("Join request already pending:", requestId);
-        return;
-      }
-      pendingRequests.set(requestId, {
-        id: requestId,
-        name,
-        userId,
-        meetingId,
-        timestamp: Date.now()
-      });
-
-      const hostSocketId = hostSockets.get(meetingId);
-      console.log(hostSocketId,'hostSocketId');
-      
-      if (hostSocketId) {
-        io.to(hostSocketId).emit("new-join-request", {
-          id: requestId,
-          name,
-          userId,
-          meetingId,
-          timestamp: Date.now()
-        });
-      }
-
-      console.log(`Join request from ${name} for meeting ${meetingId}`);
-    } catch (error) {
-      console.error("Error handling join request:", error);
+// NEW  UPDATION
+  socket.on("meeting-joined", ({ meetingId, userId }) => {
+    if (!activeMeetingUsers.has(meetingId)) {
+      activeMeetingUsers.set(meetingId, new Map());
     }
+
+    activeMeetingUsers.get(meetingId).set(userId, socket.id);
+
+    socket.meetingId = meetingId;
+    socket.userId = userId;
   });
+  // socket.on("join-request", async (data) => {
+  //   const { name, meetingId, userId } = data;
+  //   if (!activeMeetingUsers.has(meetingId)) {
+  //     activeMeetingUsers.set(meetingId, new Map());
+  //   }
+  //   const meetingUsers = activeMeetingUsers.get(meetingId);
+  //   if (meetingUsers.has(userId)) {
+  //     socket.emit("join-error", {
+  //       message: "This account is already active in the meeting."
+  //     });
+  //     return;
+  //   }
+  //   meetingUsers.set(userId, socket.id);
+  //   socket.meetingId = meetingId;
+  //   socket.userId = userId;
+  //   socket.join(meetingId)
+  //   try {
+  //     const meet = await MeetLink.findOne({ linkId: meetingId });
+  //     if (!meet) return;
+
+  //     const requestId = `${meetingId}-${userId}`;
+  //     if (pendingRequests.has(requestId)) {
+  //       console.log("Join request already pending:", requestId);
+  //       return;
+  //     }
+  //     pendingRequests.set(requestId, {
+  //       id: requestId,
+  //       name,
+  //       userId,
+  //       meetingId,
+  //       timestamp: Date.now()
+  //     });
+
+  //     const hostSocketId = hostSockets.get(meetingId);
+  //     console.log(hostSocketId,'hostSocketId');
+      
+  //     if (hostSocketId) {
+  //       io.to(hostSocketId).emit("new-join-request", {
+  //         id: requestId,
+  //         name,
+  //         userId,
+  //         meetingId,
+  //         timestamp: Date.now()
+  //       });
+  //     }
+
+  //     console.log(`Join request from ${name} for meeting ${meetingId}`);
+  //   } catch (error) {
+  //     console.error("Error handling join request:", error);
+  //   }
+  // });
 
   socket.on("approve-participant", async (requestId) => {
     try {
@@ -260,7 +287,18 @@ function cleanupChatHistory(meetingId) {
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
-    
+    if (socket.meetingId && socket.userId) {
+      const meetingUsers = activeMeetingUsers.get(socket.meetingId);
+  
+      if (meetingUsers) {
+        meetingUsers.delete(socket.userId);
+  
+        if (meetingUsers.size === 0) {
+          activeMeetingUsers.delete(socket.meetingId);
+          cleanupChatHistory(socket.meetingId);
+        }
+      }
+    }
     if (socket.userId) {
       userSockets.delete(socket.userId);
     }
@@ -286,13 +324,14 @@ function getPendingRequestsForMeeting(meetingId) {
   return requests;
 }
 
-const createToken = async (participantName, roomId, isAdmin = false) => {
+const createToken = async (participantName, roomId, isAdmin = false,userId) => {
   const at = new AccessToken(
     process.env.LIVEKIT_API_KEY,
     process.env.LIVEKIT_API_SECRET,
     {
-      identity: participantName,
+      identity: userId.toString(),
       ttl: "10m",
+      name:participantName
     }
   );
   at.addGrant({ roomJoin: true, room: roomId, roomAdmin: isAdmin, ingressAdmin: isAdmin });
@@ -305,9 +344,23 @@ app.get("/get-token", authMiddleware, async (req, res) => {
   const meet = await MeetLink.findOne({ linkId: meetingId });
   if (!meet)
     return res.status(404).json({ error: true, message: "Meeting not found" });
+  if (!activeMeetingUsers.has(meetingId)) {
+    activeMeetingUsers.set(meetingId, new Map());
+  }
+
+  const meetingUsers = activeMeetingUsers.get(meetingId);
+
+  // 🚫 BLOCK duplicate login
+  if (meetingUsers.has(userId)) {
+    return res.status(403).json({
+      error: true,
+      message: "This account is already active in the meeting from another device.",
+    });
+  }
+
 
   const isHost = meet?.hostId.toString() === userId.toString();
-  const token = await createToken(name, meetingId, isHost);
+  const token = await createToken(name, meetingId, isHost,userId);
 
   res.status(200).json({ 
     token, 
@@ -324,6 +377,15 @@ app.post("/kick", authMiddleware, async (req, res) => {
   );
   const { roomId, identity } = req.body;
   await svc.removeParticipant(roomId, identity);
+  const meetingUsers = activeMeetingUsers.get(roomId);
+  if (meetingUsers) {
+    meetingUsers.delete(identity);
+
+    if (meetingUsers.size === 0) {
+      activeMeetingUsers.delete(roomId);
+      cleanupChatHistory(roomId);
+    }
+  }
   res.json({ message: "Participant removed" });
 });
 
@@ -340,11 +402,21 @@ console.log(name, meetingId, userId);
         message: "Meeting not found" 
       });
     }
+    const meetingUsers = activeMeetingUsers.get(meetingId);
 
+    // 🚫 User already active
+    if (meetingUsers && meetingUsers.has(userId)) {
+      return res.json({
+        error: true,
+        message: "This account is already joined from another device."
+      });
+    }
+    
     const isHost = meet.hostId.toString() === userId.toString();
     
     if (isHost) {
       return res.status(200).json({ 
+        error:false,
         success: true, 
         approved: true,
         isHost: true 
@@ -388,7 +460,22 @@ console.log(name, meetingId, userId);
     });
   }
 });
+// NEW  UPDATION
+app.post("/leave-meeting", authMiddleware, (req, res) => {
+  const { meetingId, userId } = req.body;
 
+  const meetingUsers = activeMeetingUsers.get(meetingId);
+  if (meetingUsers) {
+    meetingUsers.delete(userId);
+
+    if (meetingUsers.size === 0) {
+      activeMeetingUsers.delete(meetingId);
+      cleanupChatHistory(meetingId);
+    }
+  }
+
+  res.json({ success: true });
+});
 
 
 server.listen(port, () => console.log(`Server running on port ${port}`));
