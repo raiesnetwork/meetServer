@@ -1,3 +1,8 @@
+import admin from "firebase-admin";
+import serviceAccount from "./firebase-service.json" assert { type: "json" };
+import userScheema from "../Models/UserSchema";
+
+
 const userSocketMap = {}; // userId => socketId
 const busyUsers = {};      // userId → true/false
 
@@ -31,15 +36,16 @@ export default function setupVideoCall(io) {
         }
       });
 
-    socket.on("initiate-video-call", (data) => {
+    socket.on("initiate-video-call", async(data) => {
       const { roomName, callerId, callerName, receiverId } = data;
       
       const receiverSocket = userSocketMap[receiverId];
 
-      if (!receiverSocket) {
-        socket.emit("user-offline", "User is offline");
-        return;
-      }
+      // if (!receiverSocket) {
+      //   socket.emit("user-offline", "User is offline");
+      //   return;
+      // }
+      if (receiverSocket) {
       busyUsers[callerId] = true;
       videoIO.to(receiverSocket).emit("incoming-video-call", {
         roomName,
@@ -48,8 +54,41 @@ export default function setupVideoCall(io) {
       });
 
       console.log("Incoming call sent to:", receiverId);
+      return
+    }
+    const receiver = await userScheema.findById(receiverId);
+    if (!receiver?.fcmToken) {
+      socket.emit("user-offline", "User unavailable");
+      return;
+    }
+    busyUsers[callerId] = true;
+    await admin.messaging().send({
+      token: receiver.fcmToken,
+      notification: {
+        title: "Incoming Video Call",
+        body: `${callerName} is calling you`,
+      },
+      data: {
+        type: "video_call",
+        roomName,
+        callerId,
+        callerName,
+      },
+      android: {
+        priority: "high",
+      },
+      apns: {
+        payload: {
+          aps: {
+            "content-available": 1
+          }
+        }
+      }
     });
-
+  
+    console.log("Push sent for incoming call");
+  
+    });
     
     socket.on("call-accepted", (callerId) => {
       const callerSocket = userSocketMap[callerId];
