@@ -1,3 +1,10 @@
+import admin from "firebase-admin";
+import serviceAccount from "./firebase-service.json" assert { type: "json" };
+import userScheema from "../Models/UserSchema";
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 const userSocketMap = {}; // userId => socketId
 const busyUsers = {};      // userId → true/false
 
@@ -32,15 +39,17 @@ export default function setupVoiceCall(io) {
       }
     });
 
-    socket.on("initiate-voice-call", (data) => {
+    socket.on("initiate-voice-call", async(data) => {
       const { roomName, callerId, callerName, receiverId, isConference } = data;
       
       const receiverSocket = userSocketMap[receiverId];
 
-      if (!receiverSocket) {
-        socket.emit("user-offline-voice", "User is offline");
-        return;
-      }
+      // if (!receiverSocket) {
+      //   socket.emit("user-offline-voice", "User is offline");
+      //   return;
+      // }
+if (receiverSocket) {
+
 
       busyUsers[callerId] = true;
       busyUsers[receiverId] = true;
@@ -53,6 +62,42 @@ export default function setupVoiceCall(io) {
       });
 
       console.log("Incoming voice call sent to:", receiverId, "Room:", roomName);
+      return
+    }
+      const receiver = await userScheema.findById(receiverId);
+      if (!receiver?.fcmToken) {
+        socket.emit("user-offline-voice", "User is offline");
+                return;
+      }
+      busyUsers[callerId] = true;
+      busyUsers[receiverId] = true;
+
+      await admin.messaging().send({
+        token: receiver.fcmToken,
+        notification: {
+          title: "Incoming Voice Call",
+          body: `${callerName} is calling you`,
+        },
+        data: {
+          type: "voice_call",
+          roomName,
+          callerId,
+          callerName,
+        },
+        android: {
+          priority: "high",
+        },
+        apns: {
+          payload: {
+            aps: {
+              "content-available": 1
+            }
+          }
+        }
+      });
+    
+      console.log("Push sent for incoming call");
+    
     });
 
     socket.on("call-accepted-voice", (data) => {

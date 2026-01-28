@@ -1,7 +1,9 @@
 import admin from "firebase-admin";
 import serviceAccount from "./firebase-service.json" assert { type: "json" };
 import userScheema from "../Models/UserSchema";
-
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const userSocketMap = {}; // userId => socketId
 const busyUsers = {};      // userId → true/false
