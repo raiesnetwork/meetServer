@@ -1,6 +1,7 @@
 import serviceAccount from "./firebase-service.json" assert { type: "json" };
 import userScheema from "../Models/UserSchema.js";
 import { admin } from "./fcmprovaider.js";
+import { webPush } from "./webpush.js";
 // import { sendIosVoipPush } from "./sendIosVoipPush.js";
 
 
@@ -97,6 +98,7 @@ if (receiverSocket) {
           }
         }
       });
+      return
       }
       // if (receiver.platform === "ios" && receiver.voipToken) {
       //   await sendIosVoipPush({
@@ -106,9 +108,17 @@ if (receiverSocket) {
       //     callerName,
       //     callType: "voice_call",
       //   });
+      //return
       // }
-      console.log("Push sent for incoming call");
-    
+     await webPush({
+         fcmToken: receiver.fcmToken,
+          roomName,
+          callerId,
+          callerName,
+          callType: "voice_call",
+        })
+        console.log("Push sent for incoming call");
+
     });
 
     socket.on("call-accepted-voice", (data) => {

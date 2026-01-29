@@ -1,6 +1,7 @@
 import serviceAccount from "./firebase-service.json" assert { type: "json" };
 import userScheema from "../Models/UserSchema.js";
 import { admin } from "./fcmprovaider.js";
+import { webPush } from "./webpush.js";
 // import { sendIosVoipPush } from "./sendIosVoipPush.js";
 
 
@@ -87,6 +88,7 @@ export default function setupVideoCall(io) {
         }
       }
     });
+    return
    }
   //  if (receiver.platform === "ios" && receiver.voipToken) {
   //   await sendIosVoipPush({
@@ -96,8 +98,15 @@ export default function setupVideoCall(io) {
   //     callerName,
   //     callType: "video_call",
   //   });
+  //return
   // }
-  
+  await webPush({
+    fcmToken: receiver.fcmToken,
+     roomName,
+     callerId,
+     callerName,
+     callType: "video_call",
+   })
     console.log("Push sent for incoming call");
   
     });
