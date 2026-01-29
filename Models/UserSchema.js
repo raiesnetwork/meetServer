@@ -146,7 +146,7 @@ platform:{
 },
 voipToken:{
   type: String,
-},
+}, 
 });
 
 const userScheema = mongoose.model('User', UserSchema);
