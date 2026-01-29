@@ -1,9 +1,8 @@
-import admin from "firebase-admin";
 import serviceAccount from "./firebase-service.json" assert { type: "json" };
-import userScheema from "../Models/UserSchema";
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+import userScheema from "../Models/UserSchema.js";
+import { admin } from "./fcmprovaider.js";
+// import { sendIosVoipPush } from "./sendIosVoipPush.js";
+
 
 const userSocketMap = {}; // userId => socketId
 const busyUsers = {};      // userId → true/false
@@ -63,6 +62,7 @@ export default function setupVideoCall(io) {
       socket.emit("user-offline", "User unavailable");
       return;
     }
+   if(receiver.platform==='android'){
     busyUsers[callerId] = true;
     await admin.messaging().send({
       token: receiver.fcmToken,
@@ -87,6 +87,16 @@ export default function setupVideoCall(io) {
         }
       }
     });
+   }
+  //  if (receiver.platform === "ios" && receiver.voipToken) {
+  //   await sendIosVoipPush({
+  //     voipToken: receiver.voipToken,
+  //     roomName,
+  //     callerId,
+  //     callerName,
+  //     callType: "video_call",
+  //   });
+  // }
   
     console.log("Push sent for incoming call");
   

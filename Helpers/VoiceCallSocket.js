@@ -1,9 +1,8 @@
-import admin from "firebase-admin";
 import serviceAccount from "./firebase-service.json" assert { type: "json" };
-import userScheema from "../Models/UserSchema";
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+import userScheema from "../Models/UserSchema.js";
+import { admin } from "./fcmprovaider.js";
+// import { sendIosVoipPush } from "./sendIosVoipPush.js";
+
 
 const userSocketMap = {}; // userId => socketId
 const busyUsers = {};      // userId → true/false
@@ -69,6 +68,9 @@ if (receiverSocket) {
         socket.emit("user-offline-voice", "User is offline");
                 return;
       }
+      if (receiver.platform==='android') {
+        
+      
       busyUsers[callerId] = true;
       busyUsers[receiverId] = true;
 
@@ -95,7 +97,16 @@ if (receiverSocket) {
           }
         }
       });
-    
+      }
+      // if (receiver.platform === "ios" && receiver.voipToken) {
+      //   await sendIosVoipPush({
+      //     voipToken: receiver.voipToken,
+      //     roomName,
+      //     callerId,
+      //     callerName,
+      //     callType: "voice_call",
+      //   });
+      // }
       console.log("Push sent for incoming call");
     
     });

@@ -144,6 +144,9 @@ fcmToken:{
 platform:{
   type: String,
 },
+voipToken:{
+  type: String,
+},
 });
 
 const userScheema = mongoose.model('User', UserSchema);
