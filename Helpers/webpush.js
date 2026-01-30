@@ -7,11 +7,13 @@ fcmToken,
   callerId,
   callerName,
   callType, // "voice_call" | "video_call"
-}) {
+  isConference=false
+}) {  
     await admin.messaging().send({
         token: fcmToken,
         notification: {
-          title: "Incoming Call",
+          title:callType==="voice_call"? "Incoming voice Call":
+          "Incoming video Call",
           body: `${callerName} is calling you`,
         },
         data: {
@@ -22,12 +24,16 @@ fcmToken,
         },
         webpush: {
           notification: {
-            title: "Incoming  Call",
+            title:callType==="voice_call"? "Incoming voice Call":
+            "Incoming video Call",
             body: `${callerName} is calling you`,
             icon: "https://ixes.ai/logo.png",
           },
           fcmOptions: {
-            link: `https://ixes.ai/chat`,
+            link:callType==="voice_call"?
+             `https://ixes.ai/chat?call=voice&room=${roomName}&callerId=${callerId}&callerName=${callerName}&conference=${isConference}`
+            :
+            `https://ixes.ai/chat?call=video&room=${roomName}&callerId=${callerId}&callerName=${callerName}`,
           },
         },
       });

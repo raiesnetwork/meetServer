@@ -116,6 +116,7 @@ if (receiverSocket) {
           callerId,
           callerName,
           callType: "voice_call",
+          isConference
         })
         console.log("Push sent for incoming call");
 
