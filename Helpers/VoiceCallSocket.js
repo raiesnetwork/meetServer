@@ -77,10 +77,7 @@ if (receiverSocket) {
 
       await admin.messaging().send({
         token: receiver.fcmToken,
-        notification: {
-          title: "Incoming Voice Call",
-          body: `${callerName} is calling you`,
-        },
+       
         data: {
           type: "voice_call",
           roomName,
