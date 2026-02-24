@@ -67,10 +67,7 @@ export default function setupVideoCall(io) {
     busyUsers[callerId] = true;
     await admin.messaging().send({
       token: receiver.fcmToken,
-      notification: {
-        title: "Incoming Video Call",
-        body: `${callerName} is calling you`,
-      },
+    
       data: {
         type: "video_call",
         roomName,
