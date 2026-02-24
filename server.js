@@ -252,7 +252,7 @@ const addMessageToChatHistory = (meetingId, message) => {
   chatHistory.set(meetingId, messages);
 };
 const getChatHistory = (meetingId) => {
-  return chatHistory.get(meetingId) || [];cleanupChatHistory
+  return chatHistory.get(meetingId) || [];
 };
 
 const removeChatHistory = (meetingId) => {
@@ -304,13 +304,21 @@ function cleanupChatHistory(meetingId) {
     }
     
     if (socket.meetingId) {
-      hostSockets.delete(socket.meetingId);
+
+      if (hostSockets.get(socket.meetingId) === socket.id) {
+        hostSockets.delete(socket.meetingId);
+        console.log(`Host disconnected from meeting ${socket.meetingId}`);
+      }
+    
       const room = io.sockets.adapter.rooms.get(socket.meetingId);
-    if (!room || room.size === 0) {
-      console.log(`All users disconnected from meeting ${socket.meetingId}. Cleaning up chat history...`);
-      cleanupChatHistory(socket.meetingId);
+    
+      if (!room || room.size === 0) {
+        console.log(`All users disconnected from meeting ${socket.meetingId}. Cleaning up chat history...`);
+        cleanupChatHistory(socket.meetingId);
+        activeMeetingUsers.delete(socket.meetingId);
+      }
     }
-    }
+    
   });
 });
 
@@ -351,14 +359,22 @@ app.get("/get-token", authMiddleware, async (req, res) => {
   const meetingUsers = activeMeetingUsers.get(meetingId);
 
   // 🚫 BLOCK duplicate login
+  // if (meetingUsers.has(userId)) {
+  //   return res.status(403).json({
+  //     error: true,
+  //     message: "This account is already active in the meeting from another device.",
+  //   });
+  // }
+
   if (meetingUsers.has(userId)) {
-    return res.status(403).json({
-      error: true,
-      message: "This account is already active in the meeting from another device.",
-    });
+    const oldSocketId = meetingUsers.get(userId);
+  
+    // Disconnect old socket
+    io.sockets.sockets.get(oldSocketId)?.disconnect(true);
+  
+    meetingUsers.delete(userId);
   }
-
-
+  
   const isHost = meet?.hostId.toString() === userId.toString();
   const token = await createToken(name, meetingId, isHost,userId);
 
