@@ -86,14 +86,13 @@ if (receiverSocket) {
         },
         android: {
           priority: "high",
+          ttl: 30000,
+    notification: {
+      sound: "default", 
+      channelId: "call_channel"
+    }
         },
-        apns: {
-          payload: {
-            aps: {
-              "content-available": 1
-            }
-          }
-        }
+       
       });
       return
       }

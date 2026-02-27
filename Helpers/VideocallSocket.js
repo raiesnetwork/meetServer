@@ -76,14 +76,12 @@ export default function setupVideoCall(io) {
       },
       android: {
         priority: "high",
-      },
-      apns: {
-        payload: {
-          aps: {
-            "content-available": 1
-          }
+        ttl: 30000,
+        notification: {
+          sound: "default", 
+          channelId: "call_channel"
         }
-      }
+      },
     });
     return
    }
