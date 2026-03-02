@@ -80,9 +80,10 @@ if (receiverSocket) {
        
         data: {
           type: "voice_call",
-          roomName,
-          callerId,
-          callerName,
+          roomName: String(roomName),
+          callerId: String(callerId),
+          callerName: String(callerName),
+          isConference: String(isConference ?? false)
         },
         android: {
           priority: "high",

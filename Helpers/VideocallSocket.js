@@ -70,9 +70,9 @@ export default function setupVideoCall(io) {
     
       data: {
         type: "video_call",
-        roomName,
-        callerId,
-        callerName,
+        roomName: String(roomName),
+    callerId: String(callerId),
+    callerName: String(callerName),
       },
       android: {
         priority: "high",
