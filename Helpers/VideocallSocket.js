@@ -1,4 +1,4 @@
-import serviceAccount from "./firebase-service.json" assert { type: "json" };
+import serviceAccount from "./firebase-service.json" with { type: "json" };
 import userScheema from "../Models/UserSchema.js";
 import { admin } from "./fcmprovaider.js";
 import { webPush } from "./webpush.js";
@@ -20,22 +20,18 @@ export default function setupVideoCall(io) {
     });
 
     socket.on("user-busy", (data, callback) => {
-        const {  receiverId } = data;
-        const receiverBusy = !!busyUsers[receiverId];
+        const { receiverId } = data;
+        // ✅ Bug 1 fix: use === true so only explicitly-set busy flags match
+        const receiverBusy = busyUsers[receiverId] === true;
   
         console.log("Busy check:", receiverId, "->", receiverBusy);
   
-        if (receiverBusy) {
-          callback({
-            busy: true,
-            message: "User is currently in another call"
-          });
-        } else {
-          callback({
-            busy: false,
-            message: "User is free to receive call"
-          });
-        }
+        callback({
+          busy: receiverBusy,
+          message: receiverBusy
+            ? "User is currently in another call"
+            : "User is free to receive call"
+        });
       });
 
     socket.on("initiate-video-call", async(data) => {
@@ -49,6 +45,7 @@ export default function setupVideoCall(io) {
       // }
       if (receiverSocket) {
       busyUsers[callerId] = true;
+      busyUsers[receiverId] = true;
       videoIO.to(receiverSocket).emit("incoming-video-call", {
         roomName,
         callerName,
@@ -121,9 +118,10 @@ export default function setupVideoCall(io) {
     socket.on("video-call-canceled", (data) => {
       const { receiverId, receiverName, callerName, callerId } = data;
       const receiverSocket = userSocketMap[receiverId];
-    //   delete busyUsers[receiverId];
-  delete busyUsers[callerId];
 
+      // ✅ Bug 1 fix: delete BOTH sides so neither is stuck as busy
+      delete busyUsers[callerId];
+      delete busyUsers[receiverId];
 
       if (receiverSocket) {
         videoIO.to(receiverSocket).emit("video-call-ended", {
@@ -132,13 +130,17 @@ export default function setupVideoCall(io) {
         });
       }
 
-      console.log("Call ended for:", receiverId);
+      console.log("Video call cancelled — busy flags cleared for", callerId, receiverId);
     });
 
    
     socket.on("call-rejected", (data) => {
-      const { callerId, receiverName } = data;
+      const { callerId, receiverName, currentUserId } = data;
       const callerSocket = userSocketMap[callerId];
+
+      // ✅ Bug 1 fix: clear busy flags for both parties on rejection
+      delete busyUsers[callerId];
+      delete busyUsers[currentUserId];
 
       if (callerSocket) {
         videoIO.to(callerSocket).emit("call-rejected", {

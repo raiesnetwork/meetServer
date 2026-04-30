@@ -1,3 +1,6 @@
+import dns from "dns";
+dns.setServers(["8.8.8.8", "8.8.4.4"]); // Use Google DNS — ISP DNS can't resolve MongoDB Atlas SRV records
+
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -62,13 +65,9 @@ app.use('/api/videocall',videoCall)
 app.use('/api/voicecall', voiceCallRoutes);
 
 mongoose
-  .connect(process.env.DATABASE_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.DATABASE_URL)
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => console.error("MongoDB Error:", err));
-
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
