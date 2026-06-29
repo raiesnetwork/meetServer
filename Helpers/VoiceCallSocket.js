@@ -3,11 +3,11 @@ import userScheema from "../Models/UserSchema.js";
 import { admin } from "./fcmprovaider.js";
 import { webPush } from "./webpush.js";
 // import { sendIosVoipPush } from "./sendIosVoipPush.js";
-
+import mongoose from "mongoose";
 
 const userSocketMap = {}; // userId => socketId
 const busyUsers = {};      // userId → true (only set when busy, deleted when free)
-
+const pendingCalls = {};
 export default function setupVoiceCall(io) {
   const voiceIO = io.of('/voicecall');
   
@@ -41,6 +41,12 @@ export default function setupVoiceCall(io) {
       const { roomName, callerId, callerName, receiverId, isConference } = data;
       
       const receiverSocket = userSocketMap[receiverId];
+const callId = new mongoose.Types.ObjectId().toString();
+
+pendingCalls[callId] = {
+    callerId,
+    receiverId,
+};
 
       if (receiverSocket) {
         busyUsers[callerId] = true;
@@ -48,6 +54,7 @@ export default function setupVoiceCall(io) {
 
         voiceIO.to(receiverSocket).emit("incoming-voice-call", {
           roomName,
+          callId,
           callerName,
           callerId,
           isConference: isConference || false
@@ -59,6 +66,7 @@ export default function setupVoiceCall(io) {
 
       const receiver = await userScheema.findById(receiverId);
       if (!receiver?.fcmToken) {
+            delete pendingCalls[callId];
         socket.emit("user-offline-voice", "User is offline");
         return;
       }
@@ -71,6 +79,7 @@ export default function setupVoiceCall(io) {
           token: receiver.fcmToken,
           data: {
             type: "voice_call",
+              callId,
             roomName: String(roomName),
             callerId: String(callerId),
             callerName: String(callerName),
@@ -98,6 +107,7 @@ export default function setupVoiceCall(io) {
         fcmToken: receiver.fcmToken,
         roomName,
         callerId,
+        callId,
         callerName,
         callType: "voice_call",
         isConference
@@ -106,13 +116,14 @@ export default function setupVoiceCall(io) {
     });
 
     socket.on("call-accepted-voice", (data) => {
-      const { receiverId, isConference } = data;
+      const { receiverId, isConference,callId } = data;
       const callerSocket = userSocketMap[receiverId];
-
+  delete pendingCalls[callId];
       if (callerSocket) {
         voiceIO.to(callerSocket).emit("call-accepted-voice", {
           message: "Call accepted",
-          isConference: isConference || false
+          isConference: isConference || false,
+             callId,
         });
         console.log("Voice call accepted by receiver");
       }
@@ -122,20 +133,36 @@ export default function setupVoiceCall(io) {
     // That broadcast caused Flutter to receive it and re-emit participant-left-voice-call
     // back to the server, which triggered Bug 2 (deleting userSocketMap entries) in a loop.
     // Now voice-call-ended ONLY notifies the other party directly — no broadcast.
-    socket.on("voice-call-ended", (data) => {
-      const { receiverId, receiverName, callerName, callerId } = data;
+    socket.on("voice-call-ended", async (data) => {
+      const { receiverId, receiverName, callerName, callerId ,    callId} = data;
       const receiverSocket = userSocketMap[receiverId];
 
       // Free both users
       delete busyUsers[callerId];
       delete busyUsers[receiverId];
-
       if (receiverSocket) {
+           delete pendingCalls[callId];
         voiceIO.to(receiverSocket).emit("voice-call-ended", {
           receiverId: callerId,
           receiverName: callerName
         });
+        return
+      }else{
+         const receiver = await userScheema.findById(receiverId);
+
+ if (pendingCalls[callId]) {
+    delete pendingCalls[callId];
+
+    await admin.messaging().send({
+        token: receiver.fcmToken,
+        data: {
+            type: "cancel_call",
+            callId
+        }
+    });
+}
       }
+
 
       console.log("Voice call ended for:", receiverId || "conference");
     });
@@ -145,12 +172,12 @@ export default function setupVoiceCall(io) {
     // !!false === false, so the busy check works, BUT the key's presence
     // can cause subtle issues. DELETE is the correct clean-up.
     socket.on("call-rejected-voice", (data) => {
-      const { callerId, receiverName, currentUserId } = data;
+      const { callerId, receiverName, currentUserId,callId } = data;
       const callerSocket = userSocketMap[callerId];
 
       delete busyUsers[callerId];
       delete busyUsers[currentUserId];
-
+  delete pendingCalls[callId];
       console.log("Voice call rejected — busy flags cleared for", callerId, currentUserId);
 
       if (callerSocket) {
