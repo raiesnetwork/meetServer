@@ -114,7 +114,7 @@ export default function setupVideoCall(io) {
   
     });
     
-  socket.on("call-accepted", (data) => {
+  socket.on("call-accepted",async (data) => {
     const { callerId, callId } = data;
       const callerSocket = userSocketMap[callerId];
       delete pendingCalls[callId];
