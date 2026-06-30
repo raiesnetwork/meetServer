@@ -44,8 +44,10 @@ export default function setupVoiceCall(io) {
 const callId = new mongoose.Types.ObjectId().toString();
 
 pendingCalls[callId] = {
+    roomName,              // <-- ADD THIS
     callerId,
     receiverId,
+    createdAt: Date.now(), // optional but recommended
 };
 
       if (receiverSocket) {
@@ -148,22 +150,37 @@ pendingCalls[callId] = {
         });
         return
       }else{
-         const receiver = await userScheema.findById(receiverId);
+    const callData = pendingCalls[callId];
 
- if (pendingCalls[callId]) {
-    delete pendingCalls[callId];
+    if (callData) {
 
-    await admin.messaging().send({
-        token: receiver.fcmToken,
-        data: {
-            type: "cancel_call",
-            callId
-        }
-    });
-
-    
+        // Get the original roomName
+     if (!callData?.roomName) {
+    console.log("Pending call not found:", callId);
+    return;
 }
-      }
+
+const { roomName } = callData;
+
+        delete pendingCalls[callId];
+
+        const receiver = await userScheema.findById(receiverId);
+
+        if (receiver?.fcmToken) {
+
+            await admin.messaging().send({
+                token: receiver.fcmToken,
+                data: {
+                    type: "cancel_call",
+                    callId,
+                    roomName: String(roomName),   // <-- ADD THIS
+                    callType: "voice_call"        // <-- Optional but recommended
+                }
+            });
+
+        }
+    }
+}
 
 
       console.log("Voice call ended for:", receiverId || "conference");
