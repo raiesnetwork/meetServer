@@ -129,7 +129,7 @@ export default function setupVideoCall(io) {
     });
 
     
-    socket.on("video-call-canceled", (data) => {
+    socket.on("video-call-canceled", async(data) => {
       const { receiverId, receiverName, callerName, callerId,        callId } = data;
       const receiverSocket = userSocketMap[receiverId];
 
