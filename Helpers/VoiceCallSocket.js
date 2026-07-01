@@ -90,10 +90,7 @@ pendingCalls[callId] = {
           android: {
             priority: "high",
             ttl: 30000,
-            notification: {
-              sound: "default",
-              channelId: "call_channel"
-            }
+         
           },
         });
         return;
